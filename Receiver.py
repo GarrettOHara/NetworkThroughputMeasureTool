@@ -16,9 +16,12 @@ import matplotlib.pyplot as plt
 # FIND PORT TO CLEAR WITH:
 # sudo netstat -plnt | grep { PORT NUMBER }
 
-server_socket = None
+HEADER = 64
+FORMAT = "utf-8"
+DISCONNECT = "!DISCONNECT"
+BUFFER = 0
 
-def write_data(host, port):
+def write_connection_data(host, port):
     dic = {
         "host":host,
         "port":port
@@ -26,101 +29,141 @@ def write_data(host, port):
     with open('data.json','w', encoding='utf-8') as f:
         json.dump(dic, f, ensure_ascii=False, indent=2)
 
-def handle_client(conn,addr):
-    try:
-      global COUNT
-      COUNT = 0
-      while True:
-          data = conn.recv(1024)
-          print('\nrecv:', data)
-          data = str(datetime.datetime.now())
-          if data:
-              COUNT += len(data)
-          print("BUFFER:" + str(COUNT))
-          print('------------------------------------')
-          time.sleep(0.5)
+def client(conn, addr):
 
-    except BrokenPipeError:
-        print('[DEBUG] addr:', addr, 'Connection closed by client?')
-    except Exception as ex:
-        print('[DEBUG] addr:', addr, 'Exception:', ex, )
-    finally:
-        print("BUFFER:" + COUNT)
-        conn.close()
+    print("NEW CONNECTION: {}".format(addr))
+    connected = True
+    while(connected):
+        # conn.recv() is a block, this is why it needs to be
+        # in a new thread
+        message = conn.recv(HEADER).decode(FORMAT)
+        if message:
+            message = int(message)
+            msg = conn.recv(message).decode(FORMAT)
+
+            if msg == DISCONNECT:
+                connected = False
+
+            print("ADDR: {} SENT {}".format(addr, msg))
+        
+    conn.close()
+
+
+def start(server):
+    server.listen()
+    print("RUNNING ON: {}".format(server))
+
+    while True:
+        # server.accept() is a block line of code
+        conn, addr = server.accept()
+        threading.Thread(target=client, args=(conn, addr)).start()
+        print("ACTIVE CONNECTIONS: {}".format(threading.activeCount() -1))
+    
+def bandwidth():
+    pass
+
 
 def main():
 
-  # CONFIGURE SOCKET
-  server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
-  # SOLUTION FOR "[Error 89] Address already in use". Use before bind()
-  # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
+    # SETUP HOSTING DATA
+    print("YOU'RE LOCAL IP ADDRESS IS: {}".format(socket.gethostbyname(
+        socket.gethostname()))
+    )
+    host = "192.168.1.212"
+    port = 8000
 
-  # SETUP HOSTING DATA
-  host = "0.0.0.0"
-  port = 8000
+    # GET CUSTOM DATA
+    tmp = input("Please specify host IP address [ENTER NOTHING FOR DEFAULT]: ")
+    if tmp != "":
+        host = tmp
 
-  # GET CUSTOM DATA
-  tmp = input("Please specify host IP address [ENTER NOTHING FOR DEFAULT]: ")
-  if tmp != "":
-      host = tmp
+    tmp = input("Please specify what port to send data on "+
+        "[ENTER NOTHING FOR DEFAULT PORT]: "
+    )
+    if tmp != "": 
+        port = int(tmp)
 
-  tmp = input("Please specify what port to send data on [ENTER NOTHING FOR DEFAULT PORT]: ")
-  if tmp != "": 
-      port = tmp
-  
-  # PRINT AND SAVE CONNECTION DATA
-  print("YOU'RE CONFIGURED WITH\nHOST: {}\nPORT: {}".format(host, port))
-  write_data(host,port)
-
-  # BIND SERVER TO PORT
-  server_socket.bind((host,port))
-  server_socket.listen()
-  
-  
-  (clientConnected, clientAddress) = server_socket.accept();
-
-  # INITIALIZE MEASUREMENT VARIABLES
-  COUNT = 0
-  start_time = datetime.datetime.now()
-  bandwidth = []
-  timeframe = []
-
-  while(COUNT < 10000):
-    # SLEEP
-    time.sleep(1)
-
-    # MEASURE ELAPSED TIME
-    mid_time = datetime.datetime.now()
-    mid = mid_time - start_time
-    mid = mid.seconds + mid.microseconds / 1000000.0
-    tmp = COUNT / 1024 / 1024 / mid
-
-    print("BYTES: {}".format(COUNT))
-    print("TIME: {}".format(mid))
-    print("BANDWIDTH: {}".format(tmp))
-    # RECORD DATA
-    timeframe.append(mid)
-    bandwidth.append(tmp)
-
-    # COUNT DATA BYTES
-    data = clientConnected.recv(512)
-    if (data):
-      COUNT += len(data)
-      print(data)
-      print()
-
+    # SELECT TCP OR UDP PROTOCOL
+    DEFAULT = True
+    tmp = "DEFAULT protocol is TCP, would you like to change to UDP? [Y/N]: "
+    if "y" in input(tmp).lower():
+        print("USING UDP")
+        DEFAULT = False
+        socket_protocol = socket.SOCK_DGRAM
     else:
-        break
+        print("USING TCP")
+        socket_protocol = socket.SOCK_STREAM
     
-  end_time = datetime.datetime.now()
-  delta = end_time-start_time
-  delta = delta.seconds + delta.microseconds / 1000000.0
-  print("\n\n------------------------------------------------\n\n")
-  print("TOTAL ELLAPSED TIME: {}".format(delta))
-  print("AVERAGE MB/S: {}".format(COUNT / 1024 / 1024 / delta))
+    # CONFIGURE SOCKET
+    server_socket = socket.socket(socket.AF_INET, socket_protocol);
 
-  plt.scatter(timeframe,bandwidth)
-  plt.show()
+    # SOLUTION FOR "[Error 89] Address already in use". Use before bind()
+    # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);
+
+    # PRINT AND SAVE CONNECTION DATA
+    print("YOU'RE CONFIGURED WITH\nHOST: {}\nPORT: {}".format(host, port))
+    write_connection_data(host,port)
+
+    # BIND SERVER TO PORT
+    server_socket.bind((host,port))
+    # if DEFAULT:
+    #     server_socket.listen()
+
+    
+    start(server_socket)
+
+    # (clientConnected, clientAddress) = server_socket.accept();
+    # print("NEW CONNECTION FROM ADDR: {}".format(clientAddress))
+
+
+    # # INITIALIZE MEASUREMENT VARIABLES
+    # COUNT = 0
+    # start_time = datetime.datetime.now()
+    # bandwidth = []
+    # timeframe = []
+
+    """
+    after you wait a second, record calculations, reset the bytes
+
+    total bytes in second * 8  / delta / 1e6 for megabits
+    """
+
+    # while(COUNT < 5000):
+    #     # SLEEP
+    #     time.sleep(1)
+
+    #     # COUNT DATA BYTES
+    #     data = clientConnected.recv(1024)
+    #     if (data):
+    #         COUNT += len(data)
+
+    #         # MEASURE ELAPSED TIME
+    #         mid_time = datetime.datetime.now()
+    #         mid = mid_time - start_time
+    #         mid = mid.seconds + mid.microseconds / 1000000.0
+    #         tmp = COUNT / 1024. / mid
+
+    #         print("BYTES: {}".format(COUNT))
+    #         print("TIME: {}".format(mid))
+    #         print("BANDWIDTH: {}".format(tmp))
+    #         # RECORD DATA
+    #         timeframe.append(mid)
+    #         bandwidth.append(tmp)
+
+    #     else:
+    #         break
+    
+    # end_time = datetime.datetime.now()
+    # delta = end_time-start_time
+    # delta = delta.seconds + delta.microseconds / 1000000.0
+    # print("\n\n------------------------------------------------\n\n")
+    # print("TOTAL ELLAPSED TIME: {}".format(delta))
+    # print("AVERAGE MB/S: {}".format(COUNT / 1024 / delta))
+
+    # plt.scatter(timeframe,bandwidth)
+    # plt.xlabel("Time (seconds)")
+    # plt.ylabel("Brandwidth (Mb/s)")
+    # plt.show()
     
     # t = threading.Thread(target=handle_client, args=(clientConnected, clientAddress))
     # t.start()

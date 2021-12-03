@@ -3,16 +3,17 @@
 # CS 578: Wireless Networks
 # Dr. Wang
 
-from io import RawIOBase
 import os
 import sys
-import time
 import json
 import socket
 import traceback
+import threading
 
-server_socket = None
-HOST_ref = None
+HEADER = 64
+BUFFSIZE = 1024
+FORMAT = "utf-8"
+DISCONNECT = "!DISCONNECT"
 
 def get_connection_data():
     data = {}
@@ -20,37 +21,70 @@ def get_connection_data():
         data = json.load(r)
     return data['host'], data['port']
 
+def send_UDP(msg,sender,host,port):
+    while True:
+        message = msg.encode(FORMAT)
+        # SEND BYTE ARRAY
+        sender.sendto(bytes(message),(host,port))
+    
+
+def send_TCP(msg, sender):
+    while True:
+        message = msg.encode(FORMAT)
+        length = len(message)
+        send_length = str(length).encode(FORMAT)
+        send_length += b' '* (HEADER - length)
+        sender.send(send_length)
+        sender.send(message)
+        print(send_length)
+        print(message)
+
 def main():
+
+    # SELECT TCP OR UDP PROTOCOL
+    DEFAULT = True
+    tmp = "DEFAULT protocol is TCP, would you like to change to UDP? [Y/N]: "
+    if "y" in input(tmp).lower():
+        print("USING UDP")
+        DEFAULT = False
+        socket_protocol = socket.SOCK_DGRAM
+    else:
+        print("USING TCP")
+        socket_protocol = socket.SOCK_STREAM
     
     # CONFIGURE SOCKET
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM);
+    server_socket = socket.socket(socket.AF_INET, socket_protocol);
 
     # GET CONNECTION DATA
     host, port = get_connection_data()
-    HOST_ref = host
-    print("USING CONNECTION\nHOST: {}\nPORT: {}".format(host,port))
+    print("\nHOST: {}\nPORT: {}".format(host,port))
 
     # CONNECT TO SERVER
     server_socket.connect((host,port))
-    # stream = StreamSocket(server_socket,Raw)
 
     # SEND DATA TO SERVER
-    while(True):
-        data = "TEST DATA"
-        arr = bytes(data,'utf-8')
-        server_socket.send(data.encode())
-        print("\nSENT.\nRAW: {}\nENCODED:".format(data))
-        for byte in arr:
-            print(byte, end=' ')
-        print()
-        time.sleep(0.2)
-    
+    if DEFAULT:
+        print("RUNNING TCP")
+        threading.Thread(target=send_TCP,
+            args=("TEST DATA", server_socket)
+        ).start()
+        # send_TCP("TEST DATA", server_socket)
+    else:
+        print("RUNNING UDP")
+        threading.Thread(target=send_UDP,
+            args=("TEST DATA", server_socket, host, port)
+        ).start()
+        # send_UDP("TEST DATA", server_socket, host, port)
 
+    # DISSCONECT
+    if DEFAULT:
+        send_TCP(DISCONNECT, server_socket)
+    else:
+        send_UDP(DISCONNECT, server_socket, host, port)
+ 
 if __name__ == "__main__":
     try:
         main()
-    except BrokenPipeError:
-        print('[DEBUG] addr:', HOST_ref, 'Connection closed by client?')
 
     except KeyboardInterrupt:
         try:
@@ -63,9 +97,6 @@ if __name__ == "__main__":
         try:
             print("\nERROR:\n")
             traceback.print_exc()
-            print("----------------------------------------------------------")
             sys.exit(0)
         except SystemExit:
             os._exit(0)
-    finally:
-        server_socket.close()
