@@ -11,12 +11,12 @@ import json
 import socket
 import threading
 import traceback
-
-from matplotlib.pyplot import sca
 from graph import scatter_plot
+
 
 # FIND PORT TO CLEAR WITH:
 # sudo netstat -plnt | grep { PORT NUMBER }
+
 
 BUFFER = 0
 DEFAULT = True
@@ -25,6 +25,7 @@ TERMINATE = False
 PACKET_SIZE = 1024
 SERVER_SOCKET = None
 DISCONNECT = "!DISCONNECT"
+
 
 def save_results(time, throughput):
     header = ["TIME", "THROUGHPUT"]
@@ -36,13 +37,16 @@ def save_results(time, throughput):
             write.writerow(row)
     print("SAVED DATA TO FILE")
 
+
 def write_connection_data(host, port):
     dic = {
         "host":host,
-        "port":port
+        "port":port,
+        "packet_size": PACKET_SIZE
     }
     with open('data.json','w', encoding='utf-8') as f:
         json.dump(dic, f, ensure_ascii=False, indent=2)
+
 
 def client():
     global BUFFER
@@ -85,6 +89,7 @@ def measure_bandwidth():
 def timer():
     threading.Thread(target=measure_bandwidth,args=()).start()
 
+
 def start():
     if DEFAULT:
         SERVER_SOCKET.listen()
@@ -93,11 +98,10 @@ def start():
     print("ACTIVE CONNECTIONS: {}".format(threading.activeCount() -1))
 
 
-
 def main():
-    global TERMINATE
     global SERVER_SOCKET
     global PACKET_SIZE
+    global TERMINATE
     global DEFAULT
 
     # SELECT TCP OR UDP PROTOCOL
@@ -165,7 +169,6 @@ def main():
     threading.Thread(target=scatter_plot, args=(TIME, THROUGHPUT)).start()
 
 
-    
 if __name__ == '__main__':
   try:
     main()

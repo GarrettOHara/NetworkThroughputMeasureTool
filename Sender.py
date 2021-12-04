@@ -10,9 +10,9 @@ import socket
 import traceback
 import threading
 
-from Receiver import DEFAULT
 
 FORMAT = "utf-8"
+TERMINATE = False
 PACKET_SIZE = 1024
 SERVER_SOCKET = None
 DISCONNECT = "!DISCONNECT"
@@ -22,7 +22,8 @@ def get_connection_data():
     data = {}
     with open('data.json') as r:
         data = json.load(r)
-    return data['host'], data['port']
+    return data['host'], data['port'], data['packet_size']
+
 
 def start(host, port):
     if DEFAULT:
@@ -37,13 +38,14 @@ def start(host, port):
             args=(host, port)
         ).start()
 
+
 def send_UDP(host,port):
     # CREATE BYTE ARRAY
     arr = bytearray(PACKET_SIZE)
 
     # SEND DATA
     try:
-        while True:
+        while not TERMINATE:
             print(arr)
             SERVER_SOCKET.sendto(arr,(host,port))
 
@@ -62,7 +64,7 @@ def send_TCP(host, port):
     # CREATE DATA ARRAY
     arr = bytearray(PACKET_SIZE)
     try:
-        while True:
+        while not TERMINATE:
             SERVER_SOCKET.send(arr)
             print("DATA SENT")
     except socket.error as e:
@@ -72,10 +74,16 @@ def send_TCP(host, port):
     finally:
         SERVER_SOCKET.close()
 
+
 def main():
     global SERVER_SOCKET
     global PACKET_SIZE
+    global TERMINATE
     global DEFAULT
+
+    # GET CONNECTION DATA
+    host, port, PACKET_SIZE = get_connection_data()
+    print("\nHOST: {}\nPORT: {}".format(host,port))
 
     # SELECT TCP OR UDP PROTOCOL
     DEFAULT = True
@@ -89,7 +97,7 @@ def main():
         socket_protocol = socket.SOCK_STREAM
     
     tmp = input("Please specify desired packet size"+
-        "[ENTER NOTHING FOR DEFUALT 1024]: "
+        "[ENTER NOTHING FOR DEFUALT {}]: ".format(PACKET_SIZE)
     )
     if tmp != "":
         PACKET_SIZE = int(tmp)
@@ -98,7 +106,7 @@ def main():
     SERVER_SOCKET = socket.socket(socket.AF_INET, socket_protocol);
 
     # GET CONNECTION DATA
-    host, port = get_connection_data()
+    host, port, PACKET_SIZE = get_connection_data()
     print("\nHOST: {}\nPORT: {}".format(host,port))
 
     # SEND DATA TO SERVER
@@ -106,6 +114,9 @@ def main():
         
     while input() != "stop":
         pass
+
+    TERMINATE = True
+
 
 if __name__ == "__main__":
     try:
