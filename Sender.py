@@ -10,10 +10,13 @@ import socket
 import traceback
 import threading
 
-HEADER = 64
-BUFFSIZE = 1024
+from Receiver import DEFAULT
+
 FORMAT = "utf-8"
+PACKET_SIZE = 1024
+SERVER_SOCKET = None
 DISCONNECT = "!DISCONNECT"
+
 
 def get_connection_data():
     data = {}
@@ -21,25 +24,58 @@ def get_connection_data():
         data = json.load(r)
     return data['host'], data['port']
 
-def send_UDP(msg,sender,host,port):
-    while True:
-        message = msg.encode(FORMAT)
-        # SEND BYTE ARRAY
-        sender.sendto(bytes(message),(host,port))
+def start(host, port):
+    if DEFAULT:
+        print("RUNNING TCP")
+        threading.Thread(target=send_TCP,
+            args=(host, port)
+        ).start()
+        
+    else:
+        print("RUNNING UDP")
+        threading.Thread(target=send_UDP,
+            args=(host, port)
+        ).start()
+
+def send_UDP(host,port):
+    # CREATE BYTE ARRAY
+    arr = bytearray(PACKET_SIZE)
+
+    # SEND DATA
+    try:
+        while True:
+            print(arr)
+            SERVER_SOCKET.sendto(arr,(host,port))
+
+    except socket.error as e:
+        print("SOCKET ERROR: {}".format(e))
+    except IOError as e:
+        print("ERROR: {}".format(e))
+    finally:
+        SERVER_SOCKET.close()
     
 
-def send_TCP(msg, sender):
-    while True:
-        message = msg.encode(FORMAT)
-        length = len(message)
-        send_length = str(length).encode(FORMAT)
-        send_length += b' '* (HEADER - length)
-        sender.send(send_length)
-        sender.send(message)
-        print(send_length)
-        print(message)
+def send_TCP(host, port):
+    # CONNECT TO SERVER
+    SERVER_SOCKET.connect((host,port))
+
+    # CREATE DATA ARRAY
+    arr = bytearray(PACKET_SIZE)
+    try:
+        while True:
+            SERVER_SOCKET.send(arr)
+            print("DATA SENT")
+    except socket.error as e:
+        print("SOCKET ERROR: {}".format(e))
+    except IOError as e:
+        print("ERROR: {}".format(e))
+    finally:
+        SERVER_SOCKET.close()
 
 def main():
+    global SERVER_SOCKET
+    global PACKET_SIZE
+    global DEFAULT
 
     # SELECT TCP OR UDP PROTOCOL
     DEFAULT = True
@@ -52,40 +88,32 @@ def main():
         print("USING TCP")
         socket_protocol = socket.SOCK_STREAM
     
+    tmp = input("Please specify desired packet size"+
+        "[ENTER NOTHING FOR DEFUALT 1024]: "
+    )
+    if tmp != "":
+        PACKET_SIZE = int(tmp)
+    
     # CONFIGURE SOCKET
-    server_socket = socket.socket(socket.AF_INET, socket_protocol);
+    SERVER_SOCKET = socket.socket(socket.AF_INET, socket_protocol);
 
     # GET CONNECTION DATA
     host, port = get_connection_data()
     print("\nHOST: {}\nPORT: {}".format(host,port))
 
-    # CONNECT TO SERVER
-    server_socket.connect((host,port))
-
     # SEND DATA TO SERVER
-    if DEFAULT:
-        print("RUNNING TCP")
-        threading.Thread(target=send_TCP,
-            args=("TEST DATA", server_socket)
-        ).start()
-        # send_TCP("TEST DATA", server_socket)
-    else:
-        print("RUNNING UDP")
-        threading.Thread(target=send_UDP,
-            args=("TEST DATA", server_socket, host, port)
-        ).start()
-        # send_UDP("TEST DATA", server_socket, host, port)
+    start(host, port)
+        
+    while input() != "stop":
+        pass
 
-    # DISSCONECT
-    if DEFAULT:
-        send_TCP(DISCONNECT, server_socket)
-    else:
-        send_UDP(DISCONNECT, server_socket, host, port)
- 
 if __name__ == "__main__":
     try:
         main()
 
+    except BrokenPipeError:
+        print("Server Closed, Shutting down...")
+        sys.exit(0)
     except KeyboardInterrupt:
         try:
             print('\n\nKeyboard Interrupt')
